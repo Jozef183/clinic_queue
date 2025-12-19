@@ -48,6 +48,12 @@ class _QueueScreenState extends State<QueueScreen> {
   final List<SlotStatus> slots =
       List.generate(totalSlots, (_) => SlotStatus.free);
 
+  int? _activeSlotNumber() {
+    final index = slots.indexOf(SlotStatus.active);
+    if (index == -1) return null;
+    return index + 1;
+  }
+
   void _nextStatus(int index) {
     setState(() {
       switch (slots[index]) {
@@ -71,34 +77,77 @@ class _QueueScreenState extends State<QueueScreen> {
   }
 
   @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Čakáreň – simulácia'),
-        centerTitle: true,
-      ),
-      body: Padding(
-        padding: const EdgeInsets.all(12),
-        child: GridView.builder(
-          gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-            crossAxisCount: 5,
-            crossAxisSpacing: 12,
-            mainAxisSpacing: 12,
-            childAspectRatio: 1.2,
-          ),
-          itemCount: totalSlots,
-          itemBuilder: (context, index) {
-            return GestureDetector(
-              onTap: () => _nextStatus(index),
-              child: SlotTile(
-                number: index + 1,
-                status: slots[index],
+@override
+Widget build(BuildContext context) {
+  final activeNumber = _activeSlotNumber();
+
+  return Scaffold(
+    appBar: AppBar(
+      title: const Text('Čakáreň'),
+      centerTitle: true,
+    ),
+    body: Column(
+      children: [
+        // ======================
+        // AKTUÁLNE VYŠETROVANÉ
+        // ======================
+        Container(
+          width: double.infinity,
+          padding: const EdgeInsets.symmetric(vertical: 24),
+          color: Colors.black87,
+          child: Column(
+            children: [
+              const Text(
+                'Aktuálne sa vyšetruje',
+                style: TextStyle(
+                  fontSize: 20,
+                  color: Colors.white70,
+                ),
               ),
-            );
-          },
+              const SizedBox(height: 12),
+              Text(
+                activeNumber?.toString() ?? '—',
+                style: TextStyle(
+                  fontSize: 64,
+                  fontWeight: FontWeight.bold,
+                  color: activeNumber != null
+                      ? Colors.orange
+                      : Colors.white38,
+                ),
+              ),
+            ],
+          ),
         ),
-      ),
-    );
+
+        // ======================
+        // ZOZNAM PORADÍ
+        // ======================
+        Expanded(
+          child: Padding(
+            padding: const EdgeInsets.all(12),
+            child: GridView.builder(
+              gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                crossAxisCount: 5,
+                crossAxisSpacing: 12,
+                mainAxisSpacing: 12,
+                childAspectRatio: 1.2,
+              ),
+              itemCount: totalSlots,
+              itemBuilder: (context, index) {
+                return GestureDetector(
+                  onTap: () => _nextStatus(index),
+                  child: SlotTile(
+                    number: index + 1,
+                    status: slots[index],
+                  ),
+                );
+              },
+            ),
+          ),
+        ),
+      ],
+    ),
+  );
   }
 }
 
