@@ -24,13 +24,7 @@ class ClinicQueueApp extends StatelessWidget {
 /* =======================
    STAVY SLOTOV
    ======================= */
-enum SlotStatus {
-  free,
-  reserved,
-  active,
-  absent,
-  done,
-}
+enum SlotStatus { free, reserved, active, absent, done }
 
 /* =======================
    HLAVNÁ OBRAZOVKA
@@ -45,8 +39,12 @@ class QueueScreen extends StatefulWidget {
 class _QueueScreenState extends State<QueueScreen> {
   static const int totalSlots = 30;
 
-  final List<SlotStatus> slots =
-      List.generate(totalSlots, (_) => SlotStatus.free);
+  final List<SlotStatus> slots = List.generate(
+    totalSlots,
+    (_) => SlotStatus.free,
+  );
+
+  final bool isTvMode = false; // false = mobil / tablet
 
   int? _activeSlotNumber() {
     final index = slots.indexOf(SlotStatus.active);
@@ -76,78 +74,69 @@ class _QueueScreenState extends State<QueueScreen> {
     });
   }
 
-  @override
 @override
-Widget build(BuildContext context) {
-  final activeNumber = _activeSlotNumber();
+  @override
+  Widget build(BuildContext context) {
+    final activeNumber = _activeSlotNumber();
 
-  return Scaffold(
-    appBar: AppBar(
-      title: const Text('Čakáreň'),
-      centerTitle: true,
-    ),
-    body: Column(
-      children: [
-        // ======================
-        // AKTUÁLNE VYŠETROVANÉ
-        // ======================
-        Container(
-          width: double.infinity,
-          padding: const EdgeInsets.symmetric(vertical: 24),
-          color: Colors.black87,
-          child: Column(
-            children: [
-              const Text(
-                'Aktuálne sa vyšetruje',
-                style: TextStyle(
-                  fontSize: 20,
-                  color: Colors.white70,
-                ),
-              ),
-              const SizedBox(height: 12),
-              Text(
-                activeNumber?.toString() ?? '—',
-                style: TextStyle(
-                  fontSize: 64,
-                  fontWeight: FontWeight.bold,
-                  color: activeNumber != null
-                      ? Colors.orange
-                      : Colors.white38,
-                ),
-              ),
-            ],
-          ),
-        ),
+    return Scaffold(
+      backgroundColor: Colors.black,
+      appBar: isTvMode
+          ? null
+          : AppBar(title: const Text('Čakáreň'), centerTitle: true),
+      body: Column(
+        children: [
+          _buildHeader(activeNumber),
+          Expanded(child: _buildGrid()),
+        ],
+      ),
+    );
+  }
 
-        // ======================
-        // ZOZNAM PORADÍ
-        // ======================
-        Expanded(
-          child: Padding(
-            padding: const EdgeInsets.all(12),
-            child: GridView.builder(
-              gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                crossAxisCount: 5,
-                crossAxisSpacing: 12,
-                mainAxisSpacing: 12,
-                childAspectRatio: 1.2,
-              ),
-              itemCount: totalSlots,
-              itemBuilder: (context, index) {
-                return GestureDetector(
-                  onTap: () => _nextStatus(index),
-                  child: SlotTile(
-                    number: index + 1,
-                    status: slots[index],
-                  ),
-                );
-              },
+  Widget _buildHeader(int? activeNumber) {
+    return Container(
+      width: double.infinity,
+      padding: EdgeInsets.symmetric(vertical: isTvMode ? 40 : 24),
+      child: Column(
+        children: [
+          if (!isTvMode)
+            const Text(
+              'Aktuálne sa vyšetruje',
+              style: TextStyle(fontSize: 20, color: Colors.white70),
+            ),
+          const SizedBox(height: 12),
+          Text(
+            activeNumber?.toString() ?? '—',
+            style: TextStyle(
+              fontSize: isTvMode ? 120 : 64,
+              fontWeight: FontWeight.bold,
+              color: Colors.orange,
             ),
           ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildGrid() {
+    return Padding(
+      padding: const EdgeInsets.all(12),
+      child: GridView.builder(
+        gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+          crossAxisCount: isTvMode ? 6 : 5,
+          crossAxisSpacing: 12,
+          mainAxisSpacing: 12,
+          childAspectRatio: isTvMode ? 1.4 : 1.2,
         ),
-      ],
-    ),
-  );
+        itemCount: totalSlots,
+        itemBuilder: (context, index) {
+          return GestureDetector(
+            onTap: isTvMode ? null : () => _nextStatus(index),
+            child: SlotTile(number: index + 1, status: slots[index]),
+          );
+        },
+      ),
+    );
   }
 }
 
@@ -158,11 +147,7 @@ class SlotTile extends StatefulWidget {
   final int number;
   final SlotStatus status;
 
-  const SlotTile({
-    super.key,
-    required this.number,
-    required this.status,
-  });
+  const SlotTile({super.key, required this.number, required this.status});
 
   @override
   State<SlotTile> createState() => _SlotTileState();
@@ -182,11 +167,10 @@ class _SlotTileState extends State<SlotTile>
       duration: const Duration(milliseconds: 900),
     );
 
-    _scaleAnimation = Tween<double>(begin: 1.0, end: 1.08)
-        .animate(CurvedAnimation(
-      parent: _controller,
-      curve: Curves.easeInOut,
-    ));
+    _scaleAnimation = Tween<double>(
+      begin: 1.0,
+      end: 1.08,
+    ).animate(CurvedAnimation(parent: _controller, curve: Curves.easeInOut));
 
     if (widget.status == SlotStatus.active) {
       _controller.repeat(reverse: true);
@@ -255,16 +239,10 @@ class _SlotTileState extends State<SlotTile>
           children: [
             Text(
               widget.number.toString(),
-              style: const TextStyle(
-                fontSize: 36,
-                fontWeight: FontWeight.bold,
-              ),
+              style: const TextStyle(fontSize: 36, fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 6),
-            Text(
-              _labelForStatus(),
-              style: const TextStyle(fontSize: 14),
-            ),
+            Text(_labelForStatus(), style: const TextStyle(fontSize: 14)),
           ],
         ),
       ),
