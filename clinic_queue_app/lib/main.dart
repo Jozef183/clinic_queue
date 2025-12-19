@@ -105,7 +105,7 @@ class _QueueScreenState extends State<QueueScreen> {
 /* =======================
    JEDEN SLOT (ČÍSLO)
    ======================= */
-class SlotTile extends StatelessWidget {
+class SlotTile extends StatefulWidget {
   final int number;
   final SlotStatus status;
 
@@ -115,8 +115,55 @@ class SlotTile extends StatelessWidget {
     required this.status,
   });
 
+  @override
+  State<SlotTile> createState() => _SlotTileState();
+}
+
+class _SlotTileState extends State<SlotTile>
+    with SingleTickerProviderStateMixin {
+  late AnimationController _controller;
+  late Animation<double> _scaleAnimation;
+
+  @override
+  void initState() {
+    super.initState();
+
+    _controller = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 900),
+    );
+
+    _scaleAnimation = Tween<double>(begin: 1.0, end: 1.08)
+        .animate(CurvedAnimation(
+      parent: _controller,
+      curve: Curves.easeInOut,
+    ));
+
+    if (widget.status == SlotStatus.active) {
+      _controller.repeat(reverse: true);
+    }
+  }
+
+  @override
+  void didUpdateWidget(covariant SlotTile oldWidget) {
+    super.didUpdateWidget(oldWidget);
+
+    if (widget.status == SlotStatus.active) {
+      _controller.repeat(reverse: true);
+    } else {
+      _controller.stop();
+      _controller.reset();
+    }
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
   Color _colorForStatus() {
-    switch (status) {
+    switch (widget.status) {
       case SlotStatus.free:
         return Colors.green;
       case SlotStatus.reserved:
@@ -131,7 +178,7 @@ class SlotTile extends StatelessWidget {
   }
 
   String _labelForStatus() {
-    switch (status) {
+    switch (widget.status) {
       case SlotStatus.free:
         return 'Voľné';
       case SlotStatus.reserved:
@@ -147,27 +194,30 @@ class SlotTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      decoration: BoxDecoration(
-        color: _colorForStatus(),
-        borderRadius: BorderRadius.circular(16),
-      ),
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Text(
-            number.toString(),
-            style: const TextStyle(
-              fontSize: 36,
-              fontWeight: FontWeight.bold,
+    return ScaleTransition(
+      scale: _scaleAnimation,
+      child: Container(
+        decoration: BoxDecoration(
+          color: _colorForStatus(),
+          borderRadius: BorderRadius.circular(16),
+        ),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Text(
+              widget.number.toString(),
+              style: const TextStyle(
+                fontSize: 36,
+                fontWeight: FontWeight.bold,
+              ),
             ),
-          ),
-          const SizedBox(height: 6),
-          Text(
-            _labelForStatus(),
-            style: const TextStyle(fontSize: 14),
-          ),
-        ],
+            const SizedBox(height: 6),
+            Text(
+              _labelForStatus(),
+              style: const TextStyle(fontSize: 14),
+            ),
+          ],
+        ),
       ),
     );
   }
