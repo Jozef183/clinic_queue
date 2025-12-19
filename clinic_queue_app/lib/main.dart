@@ -48,27 +48,52 @@ class _QueueScreenState extends State<QueueScreen> {
   final List<SlotStatus> slots =
       List.generate(totalSlots, (_) => SlotStatus.free);
 
+  void _nextStatus(int index) {
+    setState(() {
+      switch (slots[index]) {
+        case SlotStatus.free:
+          slots[index] = SlotStatus.reserved;
+          break;
+        case SlotStatus.reserved:
+          slots[index] = SlotStatus.active;
+          break;
+        case SlotStatus.active:
+          slots[index] = SlotStatus.absent;
+          break;
+        case SlotStatus.absent:
+          slots[index] = SlotStatus.done;
+          break;
+        case SlotStatus.done:
+          slots[index] = SlotStatus.free;
+          break;
+      }
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Čakáreň – poradie'),
+        title: const Text('Čakáreň – simulácia'),
         centerTitle: true,
       ),
       body: Padding(
         padding: const EdgeInsets.all(12),
         child: GridView.builder(
           gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-            crossAxisCount: 5,          // 5 x 6 = 30 slotov
+            crossAxisCount: 5,
             crossAxisSpacing: 12,
             mainAxisSpacing: 12,
             childAspectRatio: 1.2,
           ),
           itemCount: totalSlots,
           itemBuilder: (context, index) {
-            return SlotTile(
-              number: index + 1,
-              status: slots[index],
+            return GestureDetector(
+              onTap: () => _nextStatus(index),
+              child: SlotTile(
+                number: index + 1,
+                status: slots[index],
+              ),
             );
           },
         ),
