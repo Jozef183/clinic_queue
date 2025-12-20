@@ -134,12 +134,9 @@ class QueueScreen extends StatefulWidget {
 class _QueueScreenState extends State<QueueScreen> {
   static const int totalSlots = 30;
 
-  final List<SlotStatus> slots = List.generate(
-    totalSlots,
-    (_) => SlotStatus.free,
-  );
+  List<SlotStatus> get slots => widget.slots;
 
-    bool get isTvMode => widget.isTvMode;
+  bool get isTvMode => widget.isTvMode;
   // List<SlotStatus> get slots => widget.slots;
 
 
@@ -165,7 +162,6 @@ class _QueueScreenState extends State<QueueScreen> {
           slots[index] = SlotStatus.done;
           break;
         case SlotStatus.done:
-          slots[index] = SlotStatus.free;
           break;
       }
     });
