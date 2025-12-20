@@ -4,6 +4,20 @@ void main() {
   runApp(const ClinicQueueApp());
 }
 
+class ReservationFormData {
+  int slotNumber;
+  String name;
+  String personalId;
+  String note;
+
+  ReservationFormData({
+    required this.slotNumber,
+    this.name = '',
+    this.personalId = '',
+    this.note = '',
+  });
+}
+
 /* =======================
    HLAVNÁ APLIKÁCIA
    ======================= */
@@ -21,10 +35,54 @@ class ClinicQueueApp extends StatelessWidget {
   }
 }
 
+class ModeSelectionScreen extends StatelessWidget {
+  final void Function(AppMode mode) onSelect;
+
+  const ModeSelectionScreen({super.key, required this.onSelect});
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: const Text('Režim aplikácie')),
+      body: Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            _modeButton('Pacient', AppMode.patient),
+            _modeButton('Čakáreň', AppMode.waitingRoom),
+            _modeButton('Lekár', AppMode.doctor),
+            _modeButton('TV panel', AppMode.tv),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _modeButton(String label, AppMode mode) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 8),
+      child: ElevatedButton(
+        onPressed: () => onSelect(mode),
+        style: ElevatedButton.styleFrom(
+          minimumSize: const Size(220, 56),
+        ),
+        child: Text(label, style: const TextStyle(fontSize: 18)),
+      ),
+    );
+  }
+}
+
 /* =======================
    STAVY SLOTOV
    ======================= */
 enum SlotStatus { free, reserved, active, absent, done }
+
+enum AppMode {
+  patient,
+  waitingRoom,
+  doctor,
+  tv,
+}
 
 /* =======================
    HLAVNÁ OBRAZOVKA
@@ -249,3 +307,130 @@ class _SlotTileState extends State<SlotTile>
     );
   }
 }
+
+class PatientReservationScreen extends StatefulWidget {
+  final List<SlotStatus> slots;
+
+  const PatientReservationScreen({super.key, required this.slots});
+
+  @override
+  State<PatientReservationScreen> createState() =>
+      _PatientReservationScreenState();
+}
+
+class _PatientReservationScreenState
+    extends State<PatientReservationScreen> {
+  final _formKey = GlobalKey<FormState>();
+  int? selectedSlot;
+
+  final nameCtrl = TextEditingController();
+  final pidCtrl = TextEditingController();
+  final noteCtrl = TextEditingController();
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: const Text('Rezervácia termínu')),
+      body: SingleChildScrollView(
+        padding: const EdgeInsets.all(16),
+        child: Form(
+          key: _formKey,
+          child: Column(
+            children: [
+              _buildSlotSelector(),
+              const SizedBox(height: 16),
+              TextFormField(
+                controller: nameCtrl,
+                decoration: const InputDecoration(labelText: 'Meno a priezvisko'),
+                validator: (v) =>
+                    v == null || v.isEmpty ? 'Povinné pole' : null,
+              ),
+              TextFormField(
+                controller: pidCtrl,
+                decoration: const InputDecoration(labelText: 'Rodné číslo'),
+                validator: (v) =>
+                    v == null || v.isEmpty ? 'Povinné pole' : null,
+              ),
+              TextFormField(
+                controller: noteCtrl,
+                decoration:
+                    const InputDecoration(labelText: 'Poznámka pre lekára'),
+                maxLines: 3,
+              ),
+              const SizedBox(height: 24),
+              ElevatedButton(
+                onPressed: _submit,
+                child: const Text('Rezervovať'),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildSlotSelector() {
+    return Wrap(
+      spacing: 8,
+      children: List.generate(widget.slots.length, (i) {
+        if (widget.slots[i] != SlotStatus.free) return const SizedBox.shrink();
+        final num = i + 1;
+        return ChoiceChip(
+          label: Text(num.toString()),
+          selected: selectedSlot == num,
+          onSelected: (_) => setState(() => selectedSlot = num),
+        );
+      }),
+    );
+  }
+
+  void _submit() {
+    if (selectedSlot == null) return;
+    if (_formKey.currentState!.validate()) {
+      // tu neskôr pôjde API / WebSocket
+      Navigator.pop(context);
+    }
+  }
+}
+
+class WaitingRoomSelectionScreen extends StatelessWidget {
+  final List<SlotStatus> slots;
+
+  const WaitingRoomSelectionScreen({super.key, required this.slots});
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: const Text('Vyber poradia')),
+      body: GridView.builder(
+        padding: const EdgeInsets.all(16),
+        gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+          crossAxisCount: 4,
+          mainAxisSpacing: 12,
+          crossAxisSpacing: 12,
+        ),
+        itemCount: slots.length,
+        itemBuilder: (context, i) {
+          final num = i + 1;
+          final isVisible =
+              num <= 8 || slots[i] == SlotStatus.free;
+
+          if (!isVisible) return const SizedBox.shrink();
+
+          return ElevatedButton(
+            onPressed: slots[i] == SlotStatus.free
+                ? () {
+                    // rezervácia bez osobných údajov
+                  }
+                : null,
+            child: Text(
+              num.toString(),
+              style: const TextStyle(fontSize: 32),
+            ),
+          );
+        },
+      ),
+    );
+  }
+}
+
