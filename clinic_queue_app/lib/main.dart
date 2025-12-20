@@ -21,19 +21,54 @@ class ReservationFormData {
 /* =======================
    HLAVNÁ APLIKÁCIA
    ======================= */
-class ClinicQueueApp extends StatelessWidget {
+class ClinicQueueApp extends StatefulWidget {
   const ClinicQueueApp({super.key});
+
+  @override
+  State<ClinicQueueApp> createState() => _ClinicQueueAppState();
+}
+
+class _ClinicQueueAppState extends State<ClinicQueueApp> {
+  AppMode? mode;
+
+  final List<SlotStatus> slots =
+      List.generate(30, (_) => SlotStatus.free);
 
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'Clinic Queue',
       debugShowCheckedModeBanner: false,
       theme: ThemeData.dark(),
-      home: const QueueScreen(),
+      home: mode == null
+          ? ModeSelectionScreen(onSelect: _setMode)
+          : _buildModeScreen(),
     );
   }
+
+  void _setMode(AppMode m) {
+    setState(() => mode = m);
+  }
+
+  Widget _buildModeScreen() {
+    switch (mode) {
+      case AppMode.patient:
+        return PatientReservationScreen(slots: slots);
+
+      case AppMode.waitingRoom:
+        return WaitingRoomSelectionScreen(slots: slots);
+
+      case AppMode.doctor:
+        return DoctorQueueScreen(slots: slots);
+
+      case AppMode.tv:
+        return QueueScreen(isTvMode: true, slots: slots);
+
+      default:
+        return const SizedBox.shrink();
+    }
+  }
 }
+
 
 class ModeSelectionScreen extends StatelessWidget {
   final void Function(AppMode mode) onSelect;
@@ -77,18 +112,20 @@ class ModeSelectionScreen extends StatelessWidget {
    ======================= */
 enum SlotStatus { free, reserved, active, absent, done }
 
-enum AppMode {
-  patient,
-  waitingRoom,
-  doctor,
-  tv,
-}
+enum AppMode {  patient,  waitingRoom,  doctor,  tv }
 
 /* =======================
    HLAVNÁ OBRAZOVKA
    ======================= */
 class QueueScreen extends StatefulWidget {
-  const QueueScreen({super.key});
+  final bool isTvMode;
+  final List<SlotStatus> slots;
+
+  const QueueScreen({
+    super.key,
+    required this.isTvMode,
+    required this.slots,
+  });
 
   @override
   State<QueueScreen> createState() => _QueueScreenState();
@@ -102,7 +139,9 @@ class _QueueScreenState extends State<QueueScreen> {
     (_) => SlotStatus.free,
   );
 
-  final bool isTvMode = false; // false = mobil / tablet
+    bool get isTvMode => widget.isTvMode;
+  // List<SlotStatus> get slots => widget.slots;
+
 
   int? _activeSlotNumber() {
     final index = slots.indexOf(SlotStatus.active);
@@ -434,3 +473,69 @@ class WaitingRoomSelectionScreen extends StatelessWidget {
   }
 }
 
+class DoctorQueueScreen extends StatefulWidget {
+  final List<SlotStatus> slots;
+
+  const DoctorQueueScreen({super.key, required this.slots});
+
+  @override
+  State<DoctorQueueScreen> createState() => _DoctorQueueScreenState();
+}
+
+class _DoctorQueueScreenState extends State<DoctorQueueScreen> {
+  void _setStatus(int index, SlotStatus status) {
+    setState(() {
+      widget.slots[index] = status;
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: const Text('Lekár – poradie')),
+      body: GridView.builder(
+        padding: const EdgeInsets.all(12),
+        gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+          crossAxisCount: 5,
+          mainAxisSpacing: 12,
+          crossAxisSpacing: 12,
+        ),
+        itemCount: widget.slots.length,
+        itemBuilder: (context, index) {
+          return GestureDetector(
+            onTap: () => _showActions(context, index),
+            child: SlotTile(
+              number: index + 1,
+              status: widget.slots[index],
+            ),
+          );
+        },
+      ),
+    );
+  }
+
+  void _showActions(BuildContext context, int index) {
+    showModalBottomSheet(
+      context: context,
+      builder: (_) => Wrap(
+        children: [
+          _action(index, 'Vyšetruje sa', SlotStatus.active),
+          _action(index, 'Neprítomný', SlotStatus.absent),
+          _action(index, 'Hotovo', SlotStatus.done),
+        ],
+      ),
+    );
+  }
+
+
+Widget _action(int index, String label, SlotStatus status) {
+  return ListTile(
+    title: Text(label),
+    onTap: () {
+      Navigator.pop(context);
+      _setStatus(index, status);
+    },
+  );
+}
+
+}
