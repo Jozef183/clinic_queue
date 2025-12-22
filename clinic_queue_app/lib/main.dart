@@ -52,17 +52,23 @@ class _ClinicQueueAppState extends State<ClinicQueueApp> {
   Widget _buildModeScreen() {
     switch (mode) {
       case AppMode.patient:
-        return PatientReservationScreen(slots: slots);
+        return PatientReservationScreen(slots: slots,
+        onBackToMenu: () => setState(() => mode = null),
+        );
 
       case AppMode.waitingRoom:
-        return WaitingRoomSelectionScreen(slots: slots);
+        return WaitingRoomSelectionScreen(slots: slots,
+        onBackToMenu: () => setState(() => mode = null),
+        );
 
       case AppMode.doctor:
-        return DoctorQueueScreen(slots: slots);
+        return DoctorQueueScreen(slots: slots, 
+        onBackToMenu: () => setState(() => mode = null),);
 
       case AppMode.tv:
-        return QueueScreen(isTvMode: true, slots: slots);
-
+        return QueueScreen(isTvMode: true, slots: slots,
+        onBackToMenu: () => setState(() => mode = null),
+        );
       default:
         return const SizedBox.shrink();
     }
@@ -120,11 +126,13 @@ enum AppMode {  patient,  waitingRoom,  doctor,  tv }
 class QueueScreen extends StatefulWidget {
   final bool isTvMode;
   final List<SlotStatus> slots;
+  final VoidCallback onBackToMenu;
 
   const QueueScreen({
     super.key,
     required this.isTvMode,
     required this.slots,
+    required this.onBackToMenu,
   });
 
   @override
@@ -176,7 +184,12 @@ class _QueueScreenState extends State<QueueScreen> {
       backgroundColor: Colors.black,
       appBar: isTvMode
           ? null
-          : AppBar(title: const Text('Čakáreň'), centerTitle: true),
+          : AppBar(title: const Text('Čakáreň'), centerTitle: true,
+          leading: IconButton(
+          icon: const Icon(Icons.arrow_back),
+          onPressed: widget.onBackToMenu,
+        ),
+      ),
       body: Column(
         children: [
           _buildHeader(activeNumber),
@@ -345,8 +358,9 @@ class _SlotTileState extends State<SlotTile>
 
 class PatientReservationScreen extends StatefulWidget {
   final List<SlotStatus> slots;
+  final VoidCallback onBackToMenu;
 
-  const PatientReservationScreen({super.key, required this.slots});
+  const PatientReservationScreen({super.key, required this.slots, required this.onBackToMenu, });
 
   @override
   State<PatientReservationScreen> createState() =>
@@ -365,7 +379,12 @@ class _PatientReservationScreenState
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Rezervácia termínu')),
+      appBar: AppBar(title: const Text('Rezervácia termínu'),
+              leading: IconButton(
+                icon: const Icon(Icons.arrow_back),
+                onPressed: widget.onBackToMenu,
+                ),
+              ),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(16),
         child: Form(
@@ -430,13 +449,19 @@ class _PatientReservationScreenState
 
 class WaitingRoomSelectionScreen extends StatelessWidget {
   final List<SlotStatus> slots;
+  final VoidCallback onBackToMenu;
 
-  const WaitingRoomSelectionScreen({super.key, required this.slots});
+  const WaitingRoomSelectionScreen({super.key, required this.slots, required this.onBackToMenu, });
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Vyber poradia')),
+      appBar: AppBar(title: const Text('Vyber poradia'),
+                leading: IconButton(
+                  icon: const Icon(Icons.arrow_back),
+                  onPressed: onBackToMenu,
+                ),
+              ),
       body: GridView.builder(
         padding: const EdgeInsets.all(16),
         gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
@@ -471,8 +496,9 @@ class WaitingRoomSelectionScreen extends StatelessWidget {
 
 class DoctorQueueScreen extends StatefulWidget {
   final List<SlotStatus> slots;
+  final VoidCallback onBackToMenu;
 
-  const DoctorQueueScreen({super.key, required this.slots});
+  const DoctorQueueScreen({super.key, required this.slots, required this.onBackToMenu, });
 
   @override
   State<DoctorQueueScreen> createState() => _DoctorQueueScreenState();
@@ -488,7 +514,12 @@ class _DoctorQueueScreenState extends State<DoctorQueueScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Lekár – poradie')),
+      appBar: AppBar(title: const Text('Lekár – poradie'),
+              leading: IconButton(
+                icon: const Icon(Icons.arrow_back),
+                onPressed: widget.onBackToMenu,
+                ),
+              ),
       body: GridView.builder(
         padding: const EdgeInsets.all(12),
         gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
