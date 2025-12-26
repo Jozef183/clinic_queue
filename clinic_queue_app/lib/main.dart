@@ -175,7 +175,7 @@ class _QueueScreenState extends State<QueueScreen> {
     });
   }
 
-  @override
+  //@override
   @override
   Widget build(BuildContext context) {
     final activeNumber = _activeSlotNumber();
@@ -383,11 +383,7 @@ class _PatientReservationScreenState extends State<PatientReservationScreen> {
         title: const Text('Rezervácia termínu'),
         leading: IconButton(
           icon: const Icon(Icons.arrow_back),
-          onPressed: () {
-            final appState = context.read<AppState>();
-            int index = appState.findSlotIndex(SlotStatus.active);
-            context.read<AppState>().setSlotStatus(index, SlotStatus.active);
-          },
+          onPressed: () => context.read<AppState>().setMode(null),
         ),
       ),
       body: SingleChildScrollView(
