@@ -182,9 +182,9 @@ class _QueueScreenState extends State<QueueScreen> {
 
     return Scaffold(
       backgroundColor: Colors.black,
-      appBar: isTvMode
-          ? null
-          : AppBar(
+      // appBar: isTvMode
+          //? null
+      appBar: AppBar(
               title: const Text('Čakáreň'),
               centerTitle: true,
               leading: IconButton(
