@@ -4,6 +4,13 @@ from typing import List
 
 app = FastAPI()
 
+# uvicorn main:app --reload
+
+# pridaj do websocket pre testing
+# print("UPDATE:", index, status)
+# print(app_state.slots)
+
+
 SLOT_COUNT = 30
 slots = ["free"] * SLOT_COUNT
 
@@ -38,16 +45,16 @@ async def queue_ws(websocket: WebSocket):
 
                 slots[index] = status
 
-                # await manager.broadcast({
-                #     "type": "state",
-                #     "slots": slots
-                # })
-
                 await manager.broadcast({
-                    "type": "update",
-                    "index": index,
-                    "status": status
+                    "type": "state",
+                    "slots": slots
                 })
+
+                print("UPDATE:", index, status)
+                print(slots)
+
+            elif data["type"] == "ping":
+                print("PING OK")
 
     except WebSocketDisconnect:
         manager.disconnect(websocket)

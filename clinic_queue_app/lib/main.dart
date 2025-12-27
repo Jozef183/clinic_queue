@@ -1,5 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'dart:convert';
+import 'package:web_socket_channel/web_socket_channel.dart';
+// import 'app_state.dart';
 
 /* =======================
    STAVY SLOTOV
@@ -22,15 +25,6 @@ class ReservationFormData {
   });
 }
 
-void main() {
-  runApp(
-    ChangeNotifierProvider(
-      create: (_) => AppState(),
-      child: const ClinicQueueApp(),
-    ),
-  );
-}
-
 class AppState extends ChangeNotifier {
   AppMode? mode;
 
@@ -49,11 +43,46 @@ class AppState extends ChangeNotifier {
   int findSlotIndex(SlotStatus status) {
     return slots.indexOf(status);
   }
+
+  void advanceSlotStatus(int index) {
+  switch (slots[index]) {
+    case SlotStatus.free:
+      slots[index] = SlotStatus.reserved;
+      break;
+    case SlotStatus.reserved:
+      slots[index] = SlotStatus.active;
+      break;
+    case SlotStatus.active:
+      slots[index] = SlotStatus.absent;
+      break;
+    case SlotStatus.absent:
+      slots[index] = SlotStatus.done;
+      break;
+    case SlotStatus.done:
+      return;
+  }
+  notifyListeners();
+  }
+
 }
+
 
 /* =======================
    HLAVNÁ APLIKÁCIA
    ======================= */
+void main() {
+  runApp(
+    ChangeNotifierProvider(
+      create: (context) {
+        final appState = AppState();
+        WebSocketService(appState); // 🔥 TU SA PRIPOJÍ WS
+        return appState;
+      },
+      child: const ClinicQueueApp(),
+    ),
+  );
+}
+
 class ClinicQueueApp extends StatelessWidget {
   const ClinicQueueApp({super.key});
 
@@ -65,7 +94,10 @@ class ClinicQueueApp extends StatelessWidget {
       debugShowCheckedModeBanner: false,
       theme: ThemeData.dark(),
       home: app.mode == null
-          ? ModeSelectionScreen(onSelect: (mode) => context.read<AppState>())
+          ? ModeSelectionScreen(
+          onSelect: (mode) =>
+            context.read<AppState>().setMode(mode),
+          )
           : _buildModeScreen(app),
     );
   }
@@ -73,13 +105,13 @@ class ClinicQueueApp extends StatelessWidget {
   Widget _buildModeScreen(AppState app) {
     switch (app.mode) {
       case AppMode.patient:
-        return const PatientReservationScreen();
+        return PatientReservationScreen();
       case AppMode.waitingRoom:
-        return const WaitingRoomSelectionScreen();
+        return WaitingRoomSelectionScreen();
       case AppMode.doctor:
-        return const DoctorQueueScreen();
+        return DoctorQueueScreen();
       case AppMode.tv:
-        return const QueueScreen(isTvMode: true);
+        return QueueScreen(isTvMode: true);
       default:
         return const SizedBox.shrink();
     }
@@ -126,8 +158,6 @@ class ModeSelectionScreen extends StatelessWidget {
    ======================= */
 class QueueScreen extends StatefulWidget {
   final bool isTvMode;
-  // final List<SlotStatus> slots;
-  // final VoidCallback onBackToMenu;
 
   const QueueScreen({
     super.key,
@@ -144,10 +174,8 @@ class _QueueScreenState extends State<QueueScreen> {
   static const int totalSlots = 30;
 
   List<SlotStatus> get slots => context.watch<AppState>().slots;
-
   bool get isTvMode => widget.isTvMode;
-  // List<SlotStatus> get slots => widget.slots;
-
+  
   int? _activeSlotNumber() {
     final index = slots.indexOf(SlotStatus.active);
     if (index == -1) return null;
@@ -155,7 +183,7 @@ class _QueueScreenState extends State<QueueScreen> {
   }
 
   void _nextStatus(int index) {
-    setState(() {
+    context.read<AppState>().advanceSlotStatus(index); {
       switch (slots[index]) {
         case SlotStatus.free:
           slots[index] = SlotStatus.reserved;
@@ -172,10 +200,9 @@ class _QueueScreenState extends State<QueueScreen> {
         case SlotStatus.done:
           break;
       }
-    });
+    }
   }
 
-  //@override
   @override
   Widget build(BuildContext context) {
     final activeNumber = _activeSlotNumber();
@@ -359,8 +386,6 @@ class _SlotTileState extends State<SlotTile>
 }
 
 class PatientReservationScreen extends StatefulWidget {
-  // final List<SlotStatus> slots;
-  // final VoidCallback onBackToMenu;
   const PatientReservationScreen({super.key, AppMode? mode});
 
   @override
@@ -455,8 +480,6 @@ class _PatientReservationScreenState extends State<PatientReservationScreen> {
 }
 
 class WaitingRoomSelectionScreen extends StatelessWidget {
-  // final List<SlotStatus> slots;
-  // final VoidCallback onBackToMenu;
 
   const WaitingRoomSelectionScreen({super.key});
 
@@ -560,4 +583,35 @@ class _DoctorQueueScreenState extends State<DoctorQueueScreen> {
     );
   }
   
+}
+
+
+class WebSocketService {
+  late WebSocketChannel channel;
+
+  WebSocketService(AppState appState) {
+    channel = WebSocketChannel.connect(
+      Uri.parse('ws://127.0.0.1:8000/ws/queue'),
+    );
+
+    channel.stream.listen((message) {
+      final data = jsonDecode(message);
+
+      if (data['type'] == 'state') {
+        final List<dynamic> slots = data['slots'];
+
+        for (int i = 0; i < slots.length; i++) {
+          appState.setSlotStatus(i, SlotStatus.values.byName(slots[i]));
+        }
+      }
+    });
+  }
+
+  void sendUpdate(int index, SlotStatus status) {
+    channel.sink.add(jsonEncode({
+      "type": "update",
+      "index": index,
+      "status": status.name,
+    }));
+  }
 }
