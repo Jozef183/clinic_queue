@@ -499,11 +499,28 @@ class _PatientReservationScreenState extends State<PatientReservationScreen> {
 
   void _submit() {
     if (selectedSlot == null) return;
+
     if (_formKey.currentState!.validate()) {
-      // tu neskôr pôjde API / WebSocket
-      Navigator.pop(context);
+      final index = selectedSlot! - 1;
+
+      final app = context.read<AppState>();
+
+      if (app.slots[index] != SlotStatus.free) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Slot už nie je voľný')),
+        );
+        return;
+      }
+
+      // ⛔️ zatiaľ iba lokálne – WS pridáme nižšie
+      app.setSlotStatus(index, SlotStatus.reserved);
+
+      // ✅ návrat do hlavnej ponuky
+      app.setMode(null);
     }
   }
+
+
 }
 
 class WaitingRoomSelectionScreen extends StatelessWidget {
