@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'dart:convert';
 import 'package:web_socket_channel/web_socket_channel.dart';
+// import 'package:flutter/foundation.dart';
+
 // import 'app_state.dart';
 
 /* =======================
@@ -30,6 +32,38 @@ class AppState extends ChangeNotifier {
 
   final List<SlotStatus> slots = List.generate(30, (_) => SlotStatus.free);
 
+  late WebSocketChannel _channel;
+
+  AppState() {
+    _connectWs();
+  }
+
+  void _connectWs() {
+    _channel = WebSocketChannel.connect(
+      Uri.parse('ws://127.0.0.1:8000/ws/queue'),
+    );
+
+    _channel.stream.listen(
+      (data) {
+        debugPrint("WS RECEIVED: $data");
+
+        final payload = jsonDecode(data);
+
+        if (payload['type'] == 'slots') {
+          final index = payload['index'];
+          final status = SlotStatus.values.firstWhere(
+            (e) => e.name == payload['status'],
+          );
+
+          slots[index] = status;
+          notifyListeners();
+        }
+      },
+      onError: (e) => debugPrint("WS ERROR: $e"),
+      onDone: () => debugPrint('WS CLOSED'),
+   );
+  }
+
   void setMode(AppMode? newMode) {
     mode = newMode;
     notifyListeners();
@@ -38,34 +72,31 @@ class AppState extends ChangeNotifier {
   void setSlotStatus(int index, SlotStatus status) {
     slots[index] = status;
     notifyListeners();
-  }
 
-  int findSlotIndex(SlotStatus status) {
-    return slots.indexOf(status);
+    _channel.sink.add(
+      jsonEncode({'type': 'slots', 'index': index, 'status': status.name}),
+    );
   }
 
   void advanceSlotStatus(int index) {
-  switch (slots[index]) {
-    case SlotStatus.free:
-      slots[index] = SlotStatus.reserved;
-      break;
-    case SlotStatus.reserved:
-      slots[index] = SlotStatus.active;
-      break;
-    case SlotStatus.active:
-      slots[index] = SlotStatus.absent;
-      break;
-    case SlotStatus.absent:
-      slots[index] = SlotStatus.done;
-      break;
-    case SlotStatus.done:
-      return;
+    switch (slots[index]) {
+      case SlotStatus.free:
+        setSlotStatus(index, SlotStatus.reserved);
+        break;
+      case SlotStatus.reserved:
+        setSlotStatus(index, SlotStatus.active);
+        break;
+      case SlotStatus.active:
+        setSlotStatus(index, SlotStatus.absent);
+        break;
+      case SlotStatus.absent:
+        setSlotStatus(index, SlotStatus.done);
+        break;
+      case SlotStatus.done:
+        break;
+    }
   }
-  notifyListeners();
-  }
-
 }
-
 
 /* =======================
    HLAVNÁ APLIKÁCIA
@@ -73,11 +104,7 @@ class AppState extends ChangeNotifier {
 void main() {
   runApp(
     ChangeNotifierProvider(
-      create: (context) {
-        final appState = AppState();
-        WebSocketService(appState); // 🔥 TU SA PRIPOJÍ WS
-        return appState;
-      },
+      create: (_) => AppState(),
       child: const ClinicQueueApp(),
     ),
   );
@@ -95,9 +122,8 @@ class ClinicQueueApp extends StatelessWidget {
       theme: ThemeData.dark(),
       home: app.mode == null
           ? ModeSelectionScreen(
-          onSelect: (mode) =>
-            context.read<AppState>().setMode(mode),
-          )
+              onSelect: (mode) => context.read<AppState>().setMode(mode),
+            )
           : _buildModeScreen(app),
     );
   }
@@ -175,7 +201,7 @@ class _QueueScreenState extends State<QueueScreen> {
 
   List<SlotStatus> get slots => context.watch<AppState>().slots;
   bool get isTvMode => widget.isTvMode;
-  
+
   int? _activeSlotNumber() {
     final index = slots.indexOf(SlotStatus.active);
     if (index == -1) return null;
@@ -183,7 +209,8 @@ class _QueueScreenState extends State<QueueScreen> {
   }
 
   void _nextStatus(int index) {
-    context.read<AppState>().advanceSlotStatus(index); {
+    context.read<AppState>().advanceSlotStatus(index);
+    {
       switch (slots[index]) {
         case SlotStatus.free:
           slots[index] = SlotStatus.reserved;
@@ -210,15 +237,15 @@ class _QueueScreenState extends State<QueueScreen> {
     return Scaffold(
       backgroundColor: Colors.black,
       // appBar: isTvMode
-          //? null
+      //? null
       appBar: AppBar(
-              title: const Text('Čakáreň'),
-              centerTitle: true,
-              leading: IconButton(
-                icon: const Icon(Icons.arrow_back),
-                onPressed: () => context.read<AppState>().setMode(null),
-              ),
-            ),
+        title: const Text('Čakáreň'),
+        centerTitle: true,
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back),
+          onPressed: () => context.read<AppState>().setMode(null),
+        ),
+      ),
       body: Column(
         children: [
           _buildHeader(activeNumber),
@@ -480,7 +507,6 @@ class _PatientReservationScreenState extends State<PatientReservationScreen> {
 }
 
 class WaitingRoomSelectionScreen extends StatelessWidget {
-
   const WaitingRoomSelectionScreen({super.key});
 
   @override
@@ -582,36 +608,35 @@ class _DoctorQueueScreenState extends State<DoctorQueueScreen> {
       },
     );
   }
-  
 }
 
+// class WebSocketService {
+//   late WebSocketChannel channel;
 
-class WebSocketService {
-  late WebSocketChannel channel;
+//   WebSocketService(AppState appState) {
+//     channel = WebSocketChannel.connect(
+//       Uri.parse('ws://127.0.0.1:8000/ws/queue'),
+//     );
 
-  WebSocketService(AppState appState) {
-    channel = WebSocketChannel.connect(
-      Uri.parse('ws://127.0.0.1:8000/ws/queue'),
-    );
+//     channel.stream.listen((message) {
+//       final data = jsonDecode(message);
 
-    channel.stream.listen((message) {
-      final data = jsonDecode(message);
+//       if (data['type'] == 'state') {
+//         final List<dynamic> slots = data['slots'];
 
-      if (data['type'] == 'state') {
-        final List<dynamic> slots = data['slots'];
+//         for (int i = 0; i < slots.length; i++) {
+//           appState.setSlotStatus(i, SlotStatus.values.byName(slots[i]));
+//         }
+//       }
+//     });
+//   }
 
-        for (int i = 0; i < slots.length; i++) {
-          appState.setSlotStatus(i, SlotStatus.values.byName(slots[i]));
-        }
-      }
-    });
-  }
+//   void sendUpdate(int index, SlotStatus status) {
+//     channel.sink.add(jsonEncode({
+//       "type": "update",
+//       "index": index,
+//       "status": status.name,
+//     }));
+//   }
 
-  void sendUpdate(int index, SlotStatus status) {
-    channel.sink.add(jsonEncode({
-      "type": "update",
-      "index": index,
-      "status": status.name,
-    }));
-  }
-}
+// }

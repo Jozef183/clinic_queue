@@ -1,6 +1,7 @@
 # main.py
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from typing import List
+import json
 
 app = FastAPI()
 
@@ -37,25 +38,24 @@ async def queue_ws(websocket: WebSocket):
 
     try:
         while True:
-            data = await websocket.receive_json()
+            data = await websocket.receive_text()
+            payload = json.loads(data)
 
-            if data["type"] == "update":
-                index = data["index"]
-                status = data["status"]
+            print("UPDATE:", payload)
 
-                slots[index] = status
+            index = int(payload["index"])
+            status = payload["status"]
 
-                await manager.broadcast({
-                    "type": "state",
-                    "slots": slots
-                })
+            slots[index] = status
+            print(slots)
 
-                print("UPDATE:", index, status)
-                print(slots)
-
-            elif data["type"] == "ping":
-                print("PING OK")
+            await manager.broadcast({
+                "type": "slots",
+                "index": index,
+                "status": status,
+            })
 
     except WebSocketDisconnect:
         manager.disconnect(websocket)
+
 
