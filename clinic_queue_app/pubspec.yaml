@@ -30,7 +30,7 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
-  web_socket_channel: ^2.4.0
+  web_socket_channel: ^3.0.3
   provider: ^6.0.5
   
  

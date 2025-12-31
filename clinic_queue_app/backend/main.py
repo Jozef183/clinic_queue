@@ -43,19 +43,19 @@ async def queue_ws(websocket: WebSocket):
 
             print("UPDATE:", payload)
 
-            index = int(payload["index"])
-            status = payload["status"]
+            if payload["type"] == "slots":
+                index = payload["index"]
+                slot = payload["slot"]          # 👈 TU
+                status = slot["status"]         # 👈 TU
 
-            slots[index] = status
-            print(slots)
+                # update server state
+                slots[index] = slot
 
-            await manager.broadcast({
-                "type": "slots",
-                "index": index,
-                "status": status,
-            })
+                await manager.broadcast({
+                    "type": "slots",
+                    "index": index,
+                    "slot": slot,
+                })
 
     except WebSocketDisconnect:
         manager.disconnect(websocket)
-
-

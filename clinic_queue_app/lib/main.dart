@@ -4,7 +4,7 @@ import 'dart:convert';
 import 'package:web_socket_channel/web_socket_channel.dart';
 // import 'package:flutter/foundation.dart';
 
-// import 'app_state.dart';
+// import 'package:clinic_queue_app/app_state.dart';
 
 /* =======================
    STAVY SLOTOV
@@ -13,24 +13,47 @@ enum SlotStatus { free, reserved, active, absent, done }
 
 enum AppMode { patient, waitingRoom, doctor, tv }
 
-class ReservationFormData {
-  int slotNumber;
-  String name;
-  String personalId;
-  String note;
+class QueueSlot {
+  SlotStatus status;
+  String? name;
+  String? personalId;
+  String? note;
 
-  ReservationFormData({
-    required this.slotNumber,
-    this.name = '',
-    this.personalId = '',
-    this.note = '',
+  QueueSlot({
+    this.status = SlotStatus.free,
+    this.name,
+    this.personalId,
+    this.note,
   });
+
+  Map<String, dynamic> toJson() => {
+    'status': status.name,
+    'name': name,
+    'personalId': personalId,
+    'note': note,
+  };
+
+  static QueueSlot fromJson(Map<String, dynamic> json) {
+    return QueueSlot(
+      status: SlotStatus.values.firstWhere((e) => e.name == json['status']),
+      name: json['name'],
+      personalId: json['personalId'],
+      note: json['note'],
+    );
+  }
+
+  void clear() {
+    status = SlotStatus.free;
+    name = null;
+    personalId = null;
+    note = null;
+  }
 }
 
 class AppState extends ChangeNotifier {
   AppMode? mode;
 
-  final List<SlotStatus> slots = List.generate(30, (_) => SlotStatus.free);
+  final List<QueueSlot> slots = List.generate(30, (_) => QueueSlot());
 
   late WebSocketChannel _channel;
 
@@ -50,18 +73,16 @@ class AppState extends ChangeNotifier {
         final payload = jsonDecode(data);
 
         if (payload['type'] == 'slots') {
-          final index = payload['index'];
-          final status = SlotStatus.values.firstWhere(
-            (e) => e.name == payload['status'],
-          );
+          final index = payload['index'] as int;
+          final slotData = payload['slot'];
 
-          slots[index] = status;
+          slots[index] = QueueSlot.fromJson(slotData);
           notifyListeners();
         }
       },
       onError: (e) => debugPrint("WS ERROR: $e"),
       onDone: () => debugPrint('WS CLOSED'),
-   );
+    );
   }
 
   void setMode(AppMode? newMode) {
@@ -69,19 +90,41 @@ class AppState extends ChangeNotifier {
     notifyListeners();
   }
 
-  void setSlotStatus(int index, SlotStatus status) {
-    slots[index] = status;
-    notifyListeners();
+  // 🔹 REZERVÁCIA PACIENTOM
+  void reserveSlot(
+    int index, {
+    required String name,
+    required String personalId,
+    String? note,
+  }) {
+    final slot = slots[index];
+    if (slot.status != SlotStatus.free) return;
 
-    _channel.sink.add(
-      jsonEncode({'type': 'slots', 'index': index, 'status': status.name}),
-    );
+    slot.status = SlotStatus.reserved;
+    slot.name = name;
+    slot.personalId = personalId;
+    slot.note = note;
+
+    notifyListeners();
+    _sendSlotUpdate(index);
+  }
+
+  // 🔹 ZMENA STAVU LEKÁROM
+  void setSlotStatus(int index, SlotStatus status) {
+    final slot = slots[index];
+    slot.status = status;
+
+    if (status == SlotStatus.done) {
+      slot.clear();
+    }
+
+    notifyListeners();
+    _sendSlotUpdate(index);
   }
 
   void advanceSlotStatus(int index) {
-    switch (slots[index]) {
+    switch (slots[index].status) {
       case SlotStatus.free:
-        setSlotStatus(index, SlotStatus.reserved);
         break;
       case SlotStatus.reserved:
         setSlotStatus(index, SlotStatus.active);
@@ -95,6 +138,16 @@ class AppState extends ChangeNotifier {
       case SlotStatus.done:
         break;
     }
+  }
+
+  void _sendSlotUpdate(int index) {
+    _channel.sink.add(
+      jsonEncode({
+        'type': 'slots',
+        'index': index,
+        'slot': slots[index].toJson(),
+      }),
+    );
   }
 }
 
@@ -185,12 +238,7 @@ class ModeSelectionScreen extends StatelessWidget {
 class QueueScreen extends StatefulWidget {
   final bool isTvMode;
 
-  const QueueScreen({
-    super.key,
-    required this.isTvMode,
-    // required this.slots,
-    // required this.onBackToMenu,
-  });
+  const QueueScreen({super.key, required this.isTvMode});
 
   @override
   State<QueueScreen> createState() => _QueueScreenState();
@@ -199,35 +247,17 @@ class QueueScreen extends StatefulWidget {
 class _QueueScreenState extends State<QueueScreen> {
   static const int totalSlots = 30;
 
-  List<SlotStatus> get slots => context.watch<AppState>().slots;
+  List<QueueSlot> get slots => context.watch<AppState>().slots;
   bool get isTvMode => widget.isTvMode;
 
   int? _activeSlotNumber() {
-    final index = slots.indexOf(SlotStatus.active);
+    final index = slots.indexWhere((slot) => slot.status == SlotStatus.active);
     if (index == -1) return null;
     return index + 1;
   }
 
   void _nextStatus(int index) {
     context.read<AppState>().advanceSlotStatus(index);
-    {
-      switch (slots[index]) {
-        case SlotStatus.free:
-          slots[index] = SlotStatus.reserved;
-          break;
-        case SlotStatus.reserved:
-          slots[index] = SlotStatus.active;
-          break;
-        case SlotStatus.active:
-          slots[index] = SlotStatus.absent;
-          break;
-        case SlotStatus.absent:
-          slots[index] = SlotStatus.done;
-          break;
-        case SlotStatus.done:
-          break;
-      }
-    }
   }
 
   @override
@@ -236,8 +266,6 @@ class _QueueScreenState extends State<QueueScreen> {
 
     return Scaffold(
       backgroundColor: Colors.black,
-      // appBar: isTvMode
-      //? null
       appBar: AppBar(
         title: const Text('Čakáreň'),
         centerTitle: true,
@@ -294,7 +322,10 @@ class _QueueScreenState extends State<QueueScreen> {
         itemBuilder: (context, index) {
           return GestureDetector(
             onTap: isTvMode ? null : () => _nextStatus(index),
-            child: SlotTile(number: index + 1, status: slots[index]),
+            child: SlotTile(
+              number: index + 1,
+              slot: slots[index], // ⬅️ CELÝ SLOT
+            ),
           );
         },
       ),
@@ -305,60 +336,48 @@ class _QueueScreenState extends State<QueueScreen> {
 /* =======================
    JEDEN SLOT (ČÍSLO)
    ======================= */
-class SlotTile extends StatefulWidget {
+class SlotTile extends StatelessWidget {
   final int number;
-  final SlotStatus status;
+  final QueueSlot slot;
 
-  const SlotTile({super.key, required this.number, required this.status});
-
-  @override
-  State<SlotTile> createState() => _SlotTileState();
-}
-
-class _SlotTileState extends State<SlotTile>
-    with SingleTickerProviderStateMixin {
-  late AnimationController _controller;
-  late Animation<double> _scaleAnimation;
+  const SlotTile({
+    super.key,
+    required this.number,
+    required this.slot,
+  });
 
   @override
-  void initState() {
-    super.initState();
-
-    _controller = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 900),
+  Widget build(BuildContext context) {
+    return Container(
+      decoration: BoxDecoration(
+        color: _colorForStatus(slot.status),
+        borderRadius: BorderRadius.circular(16),
+      ),
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Text(
+            number.toString(),
+            style: const TextStyle(fontSize: 36, fontWeight: FontWeight.bold),
+          ),
+          const SizedBox(height: 6),
+          Text(_labelForStatus(slot.status)),
+          if (slot.name != null)
+            Padding(
+              padding: const EdgeInsets.only(top: 4),
+              child: Text(
+                slot.name!,
+                style: const TextStyle(fontSize: 12),
+                textAlign: TextAlign.center,
+              ),
+            ),
+        ],
+      ),
     );
-
-    _scaleAnimation = Tween<double>(
-      begin: 1.0,
-      end: 1.08,
-    ).animate(CurvedAnimation(parent: _controller, curve: Curves.easeInOut));
-
-    if (widget.status == SlotStatus.active) {
-      _controller.repeat(reverse: true);
-    }
   }
 
-  @override
-  void didUpdateWidget(covariant SlotTile oldWidget) {
-    super.didUpdateWidget(oldWidget);
-
-    if (widget.status == SlotStatus.active) {
-      _controller.repeat(reverse: true);
-    } else {
-      _controller.stop();
-      _controller.reset();
-    }
-  }
-
-  @override
-  void dispose() {
-    _controller.dispose();
-    super.dispose();
-  }
-
-  Color _colorForStatus() {
-    switch (widget.status) {
+  Color _colorForStatus(SlotStatus status) {
+    switch (status) {
       case SlotStatus.free:
         return Colors.green;
       case SlotStatus.reserved:
@@ -372,8 +391,8 @@ class _SlotTileState extends State<SlotTile>
     }
   }
 
-  String _labelForStatus() {
-    switch (widget.status) {
+  String _labelForStatus(SlotStatus status) {
+    switch (status) {
       case SlotStatus.free:
         return 'Voľné';
       case SlotStatus.reserved:
@@ -385,30 +404,6 @@ class _SlotTileState extends State<SlotTile>
       case SlotStatus.done:
         return 'Hotovo';
     }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return ScaleTransition(
-      scale: _scaleAnimation,
-      child: Container(
-        decoration: BoxDecoration(
-          color: _colorForStatus(),
-          borderRadius: BorderRadius.circular(16),
-        ),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Text(
-              widget.number.toString(),
-              style: const TextStyle(fontSize: 36, fontWeight: FontWeight.bold),
-            ),
-            const SizedBox(height: 6),
-            Text(_labelForStatus(), style: const TextStyle(fontSize: 14)),
-          ],
-        ),
-      ),
-    );
   }
 }
 
@@ -484,7 +479,7 @@ class _PatientReservationScreenState extends State<PatientReservationScreen> {
     return Wrap(
       spacing: 8,
       children: List.generate(appState.slots.length, (i) {
-        if (appState.slots[i] != SlotStatus.free) {
+        if (appState.slots[i].status != SlotStatus.free) {
           return const SizedBox.shrink();
         }
         final num = i + 1;
@@ -505,10 +500,10 @@ class _PatientReservationScreenState extends State<PatientReservationScreen> {
 
       final app = context.read<AppState>();
 
-      if (app.slots[index] != SlotStatus.free) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Slot už nie je voľný')),
-        );
+      if (app.slots[index].status != SlotStatus.free) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('Slot už nie je voľný')));
         return;
       }
 
@@ -519,8 +514,6 @@ class _PatientReservationScreenState extends State<PatientReservationScreen> {
       app.setMode(null);
     }
   }
-
-
 }
 
 class WaitingRoomSelectionScreen extends StatelessWidget {
@@ -547,12 +540,13 @@ class WaitingRoomSelectionScreen extends StatelessWidget {
         itemCount: appState.slots.length,
         itemBuilder: (context, i) {
           final num = i + 1;
-          final isVisible = num <= 8 || appState.slots[i] == SlotStatus.free;
+          final isVisible =
+              num <= 8 || appState.slots[i].status == SlotStatus.free;
 
           if (!isVisible) return const SizedBox.shrink();
 
           return ElevatedButton(
-            onPressed: appState.slots[i] == SlotStatus.free
+            onPressed: appState.slots[i].status == SlotStatus.free
                 ? () {
                     // rezervácia bez osobných údajov
                   }
@@ -565,17 +559,13 @@ class WaitingRoomSelectionScreen extends StatelessWidget {
   }
 }
 
-class DoctorQueueScreen extends StatefulWidget {
+class DoctorQueueScreen extends StatelessWidget {
   const DoctorQueueScreen({super.key});
 
   @override
-  State<DoctorQueueScreen> createState() => _DoctorQueueScreenState();
-}
-
-class _DoctorQueueScreenState extends State<DoctorQueueScreen> {
-  @override
   Widget build(BuildContext context) {
-    final appState = Provider.of<AppState>(context);
+    final appState = context.watch<AppState>();
+
     return Scaffold(
       appBar: AppBar(
         title: const Text('Lekár – poradie'),
@@ -593,9 +583,14 @@ class _DoctorQueueScreenState extends State<DoctorQueueScreen> {
         ),
         itemCount: appState.slots.length,
         itemBuilder: (context, index) {
+          final slot = appState.slots[index];
+
           return GestureDetector(
             onTap: () => _showActions(context, index),
-            child: SlotTile(number: index + 1, status: appState.slots[index]),
+            child: SlotTile(
+              number: index + 1,
+              slot: slot, // ✅ celé QueueSlot
+            ),
           );
         },
       ),
@@ -605,27 +600,55 @@ class _DoctorQueueScreenState extends State<DoctorQueueScreen> {
   void _showActions(BuildContext context, int index) {
     showModalBottomSheet(
       context: context,
-      builder: (_) => Wrap(
-        children: [
-          _action(index, 'Vyšetruje sa', SlotStatus.active),
-          _action(index, 'Neprítomný', SlotStatus.absent),
-          _action(index, 'Hotovo', SlotStatus.done),
-        ],
-      ),
+      builder: (_) {
+        final slot = context.read<AppState>().slots[index];
+
+        return Padding(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Pacient',
+                style: Theme.of(context).textTheme.titleLarge,
+              ),
+              const SizedBox(height: 8),
+              Text(slot.name ?? '—'),
+              Text(slot.personalId ?? ''),
+              if (slot.note != null && slot.note!.isNotEmpty)
+                Padding(
+                  padding: const EdgeInsets.only(top: 4),
+                  child: Text('Poznámka: ${slot.note}'),
+                ),
+              const Divider(height: 24),
+              _action(context, index, 'Vyšetruje sa', SlotStatus.active),
+              _action(context, index, 'Neprítomný', SlotStatus.absent),
+              _action(context, index, 'Hotovo', SlotStatus.done),
+            ],
+          ),
+        );
+      },
     );
   }
 
-  Widget _action(int index, String label, SlotStatus status) {
-    final appState = Provider.of<AppState>(context);
+  Widget _action(
+    BuildContext context,
+    int index,
+    String label,
+    SlotStatus status,
+  ) {
     return ListTile(
       title: Text(label),
       onTap: () {
         Navigator.pop(context);
-        appState.setSlotStatus(index, status);
+        context.read<AppState>().setSlotStatus(index, status);
       },
     );
   }
 }
+
+
 
 // class WebSocketService {
 //   late WebSocketChannel channel;
