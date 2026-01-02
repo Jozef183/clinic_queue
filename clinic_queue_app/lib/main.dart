@@ -332,7 +332,8 @@ class _QueueScreenState extends State<QueueScreen> {
             onTap: isTvMode ? null : () => _nextStatus(index),
             child: SlotTile(
               number: index + 1,
-              slot: slots[index], // ⬅️ CELÝ SLOT
+              slot: slots[index],
+              isTvMode: isTvMode, // ⬅️ TV režim
             ),
           );
         },
@@ -347,34 +348,41 @@ class _QueueScreenState extends State<QueueScreen> {
 class SlotTile extends StatelessWidget {
   final int number;
   final QueueSlot slot;
+  final bool isTvMode;
 
-  const SlotTile({super.key, required this.number, required this.slot});
+  const SlotTile({
+    super.key,
+    required this.number,
+    required this.slot,
+    this.isTvMode = false,
+  });
 
   @override
   Widget build(BuildContext context) {
     return Container(
       decoration: BoxDecoration(
         color: _colorForStatus(slot.status),
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(12),
       ),
+      padding: const EdgeInsets.all(8),
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Text(
-            number.toString(),
-            style: const TextStyle(fontSize: 36, fontWeight: FontWeight.bold),
-          ),
           const SizedBox(height: 6),
           Text(_labelForStatus(slot.status)),
-          if (slot.name != null)
-            Padding(
-              padding: const EdgeInsets.only(top: 4),
-              child: Text(
-                slot.name!,
-                style: const TextStyle(fontSize: 12),
-                textAlign: TextAlign.center,
+
+          // ❗️IBA AK NIE JE TV MODE
+          if (!isTvMode && slot.name != null) ...[
+            const SizedBox(height: 6),
+            Text(
+              slot.name!,
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 14,
               ),
+              textAlign: TextAlign.center,
             ),
+          ],
         ],
       ),
     );
@@ -383,7 +391,7 @@ class SlotTile extends StatelessWidget {
   Color _colorForStatus(SlotStatus status) {
     switch (status) {
       case SlotStatus.free:
-        return Colors.green;
+        return Colors.grey;
       case SlotStatus.reserved:
         return Colors.blue;
       case SlotStatus.active:
@@ -391,7 +399,7 @@ class SlotTile extends StatelessWidget {
       case SlotStatus.absent:
         return Colors.red;
       case SlotStatus.done:
-        return Colors.grey;
+        return Colors.green;
     }
   }
 
@@ -411,6 +419,9 @@ class SlotTile extends StatelessWidget {
   }
 }
 
+/* =======================
+   OBRAZOVKY PRE JEDNOTLIVÉ REŽIMY
+   ======================= */
 class PatientReservationScreen extends StatefulWidget {
   const PatientReservationScreen({super.key, AppMode? mode});
 
@@ -629,13 +640,13 @@ class DoctorQueueScreen extends StatelessWidget {
         ),
         itemCount: appState.slots.length,
         itemBuilder: (context, index) {
-          final slot = appState.slots[index];
+          // final slot = appState.slots[index];
 
           return GestureDetector(
             onTap: () => _showActions(context, index),
             child: SlotTile(
               number: index + 1,
-              slot: slot, // ✅ celé QueueSlot
+              slot: appState.slots[index], // ✅ celé QueueSlot
             ),
           );
         },
