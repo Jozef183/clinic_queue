@@ -114,11 +114,7 @@ class AppState extends ChangeNotifier {
     final slot = slots[index];
     slot.status = status;
 
-    if (status == SlotStatus.done) {
-      slot.clear();
-    }
-
-    notifyListeners();
+     notifyListeners();
     _sendSlotUpdate(index);
   }
 

@@ -7,13 +7,19 @@ app = FastAPI()
 
 # uvicorn main:app --reload
 
-# pridaj do websocket pre testing
-# print("UPDATE:", index, status)
-# print(app_state.slots)
-
-
 SLOT_COUNT = 30
-slots = ["free"] * SLOT_COUNT
+
+# 🔥 server drží CELÝ SLOT, nie len status
+slots = [
+    {
+        "status": "free",
+        "name": None,
+        "personalId": None,
+        "note": None,
+    }
+    for _ in range(SLOT_COUNT)
+]
+
 
 class ConnectionManager:
     def __init__(self):
@@ -23,14 +29,25 @@ class ConnectionManager:
         await websocket.accept()
         self.active_connections.append(websocket)
 
+        # 👈 po pripojení pošli aktuálny stav
+        for i, slot in enumerate(slots):
+            await websocket.send_json({
+                "type": "slots",
+                "index": i,
+                "slot": slot,
+            })
+
     def disconnect(self, websocket: WebSocket):
-        self.active_connections.remove(websocket)
+        if websocket in self.active_connections:
+            self.active_connections.remove(websocket)
 
     async def broadcast(self, message: dict):
         for connection in self.active_connections:
             await connection.send_json(message)
 
+
 manager = ConnectionManager()
+
 
 @app.websocket("/ws/queue")
 async def queue_ws(websocket: WebSocket):
@@ -38,24 +55,42 @@ async def queue_ws(websocket: WebSocket):
 
     try:
         while True:
-            data = await websocket.receive_text()
-            payload = json.loads(data)
+            raw = await websocket.receive_text()
+            payload = json.loads(raw)
 
             print("UPDATE:", payload)
 
-            if payload["type"] == "slots":
-                index = payload["index"]
-                slot = payload["slot"]          # 👈 TU
-                status = slot["status"]         # 👈 TU
+            if payload.get("type") != "slots":
+                continue
 
-                # update server state
-                slots[index] = slot
+            index = payload.get("index")
+            slot = payload.get("slot")
 
-                await manager.broadcast({
-                    "type": "slots",
-                    "index": index,
-                    "slot": slot,
-                })
+            # 🛑 validácia
+            if (
+                index is None
+                or slot is None
+                or not isinstance(index, int)
+                or not (0 <= index < SLOT_COUNT)
+            ):
+                print("INVALID PAYLOAD")
+                continue
+
+            # 🧠 defaultné hodnoty (ochrana proti None)
+            slots[index] = {
+                "status": slot.get("status", "free"),
+                "name": slot.get("name"),
+                "personalId": slot.get("personalId"),
+                "note": slot.get("note"),
+            }
+
+            # 📢 broadcast všetkým (lekár, TV, pacient)
+            await manager.broadcast({
+                "type": "slots",
+                "index": index,
+                "slot": slots[index],
+            })
 
     except WebSocketDisconnect:
         manager.disconnect(websocket)
+        print("WS DISCONNECTED")
