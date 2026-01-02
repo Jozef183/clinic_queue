@@ -149,6 +149,18 @@ class AppState extends ChangeNotifier {
       }),
     );
   }
+
+  void updateSlot(int index, QueueSlot updatedSlot) {
+  slots[index] = updatedSlot;
+  notifyListeners();
+
+  _channel.sink.add(jsonEncode({
+    'type': 'slots',
+    'index': index,
+    'slot': updatedSlot.toJson(),
+  }));
+}
+
 }
 
 /* =======================
@@ -340,11 +352,7 @@ class SlotTile extends StatelessWidget {
   final int number;
   final QueueSlot slot;
 
-  const SlotTile({
-    super.key,
-    required this.number,
-    required this.slot,
-  });
+  const SlotTile({super.key, required this.number, required this.slot});
 
   @override
   Widget build(BuildContext context) {
@@ -424,6 +432,14 @@ class _PatientReservationScreenState extends State<PatientReservationScreen> {
   final noteCtrl = TextEditingController();
 
   @override
+  void dispose() {
+    nameCtrl.dispose();
+    pidCtrl.dispose();
+    noteCtrl.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
@@ -438,7 +454,13 @@ class _PatientReservationScreenState extends State<PatientReservationScreen> {
         child: Form(
           key: _formKey,
           child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              const Text(
+                'Vyberte číslo (od 5 vyššie)',
+                style: TextStyle(fontWeight: FontWeight.bold),
+              ),
+              const SizedBox(height: 8),
               _buildSlotSelector(),
               const SizedBox(height: 16),
               TextFormField(
@@ -451,7 +473,9 @@ class _PatientReservationScreenState extends State<PatientReservationScreen> {
               ),
               TextFormField(
                 controller: pidCtrl,
-                decoration: const InputDecoration(labelText: 'Rodné číslo'),
+                decoration: const InputDecoration(
+                  labelText: 'Rodné číslo',
+                ),
                 validator: (v) =>
                     v == null || v.isEmpty ? 'Povinné pole' : null,
               ),
@@ -463,9 +487,12 @@ class _PatientReservationScreenState extends State<PatientReservationScreen> {
                 maxLines: 3,
               ),
               const SizedBox(height: 24),
-              ElevatedButton(
-                onPressed: _submit,
-                child: const Text('Rezervovať'),
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton(
+                  onPressed: _submit,
+                  child: const Text('Rezervovať'),
+                ),
               ),
             ],
           ),
@@ -475,44 +502,67 @@ class _PatientReservationScreenState extends State<PatientReservationScreen> {
   }
 
   Widget _buildSlotSelector() {
-    final appState = Provider.of<AppState>(context);
+    final appState = context.watch<AppState>();
+
     return Wrap(
       spacing: 8,
+      runSpacing: 8,
       children: List.generate(appState.slots.length, (i) {
+        final slotNumber = i + 1;
+
+        // 🔒 pacient môže iba 5+
+        if (slotNumber < 5) return const SizedBox.shrink();
+
         if (appState.slots[i].status != SlotStatus.free) {
           return const SizedBox.shrink();
         }
-        final num = i + 1;
+
         return ChoiceChip(
-          label: Text(num.toString()),
-          selected: selectedSlot == num,
-          onSelected: (_) => setState(() => selectedSlot = num),
+          label: Text(slotNumber.toString()),
+          selected: selectedSlot == slotNumber,
+          onSelected: (_) {
+            setState(() => selectedSlot = slotNumber);
+          },
         );
       }),
     );
   }
 
   void _submit() {
-    if (selectedSlot == null) return;
-
-    if (_formKey.currentState!.validate()) {
-      final index = selectedSlot! - 1;
-
-      final app = context.read<AppState>();
-
-      if (app.slots[index].status != SlotStatus.free) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(const SnackBar(content: Text('Slot už nie je voľný')));
-        return;
-      }
-
-      // ⛔️ zatiaľ iba lokálne – WS pridáme nižšie
-      app.setSlotStatus(index, SlotStatus.reserved);
-
-      // ✅ návrat do hlavnej ponuky
-      app.setMode(null);
+    if (selectedSlot == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Vyberte číslo')),
+      );
+      return;
     }
+
+    if (!_formKey.currentState!.validate()) return;
+
+    final index = selectedSlot! - 1;
+    final app = context.read<AppState>();
+
+    final current = app.slots[index];
+
+    if (current.status != SlotStatus.free) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Slot už nie je voľný')),
+      );
+      return;
+    }
+
+    // ✅ POSIELAME CELÝ SLOT
+    app.updateSlot(
+      index,
+      QueueSlot(
+        status: SlotStatus.reserved,
+        name: nameCtrl.text.trim(),
+        personalId: pidCtrl.text.trim(),
+        note: noteCtrl.text.trim(),
+      ),
+    );
+
+    // návrat do menu
+    app.setMode(null);
   }
 }
 
@@ -609,10 +659,7 @@ class DoctorQueueScreen extends StatelessWidget {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(
-                'Pacient',
-                style: Theme.of(context).textTheme.titleLarge,
-              ),
+              Text('Pacient', style: Theme.of(context).textTheme.titleLarge),
               const SizedBox(height: 8),
               Text(slot.name ?? '—'),
               Text(slot.personalId ?? ''),
@@ -647,36 +694,3 @@ class DoctorQueueScreen extends StatelessWidget {
     );
   }
 }
-
-
-
-// class WebSocketService {
-//   late WebSocketChannel channel;
-
-//   WebSocketService(AppState appState) {
-//     channel = WebSocketChannel.connect(
-//       Uri.parse('ws://127.0.0.1:8000/ws/queue'),
-//     );
-
-//     channel.stream.listen((message) {
-//       final data = jsonDecode(message);
-
-//       if (data['type'] == 'state') {
-//         final List<dynamic> slots = data['slots'];
-
-//         for (int i = 0; i < slots.length; i++) {
-//           appState.setSlotStatus(i, SlotStatus.values.byName(slots[i]));
-//         }
-//       }
-//     });
-//   }
-
-//   void sendUpdate(int index, SlotStatus status) {
-//     channel.sink.add(jsonEncode({
-//       "type": "update",
-//       "index": index,
-//       "status": status.name,
-//     }));
-//   }
-
-// }
